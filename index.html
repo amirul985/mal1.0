@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lightning Teacher - Thunder Lock (Hidroponik)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #0f172a;
+            color: white;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+        h1, h2, h3, .orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+        
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 50; /* Atas UI supaya petir nampak jelas */
+            pointer-events: none;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #webcam-container {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 240px;
+            height: 180px;
+            border-radius: 12px;
+            border: 2px solid #06b6d4;
+            overflow: hidden;
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.5);
+            z-index: 5;
+        }
+
+        #webcam {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror effect */
+        }
+
+        .answer-btn {
+            transition: all 0.2s ease;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        .answer-btn.hovered {
+            transform: scale(1.05);
+            box-shadow: 0 0 25px #06b6d4, inset 0 0 10px #06b6d4;
+            border-color: #22d3ee;
+            background-color: rgba(6, 182, 212, 0.2);
+        }
+
+        @keyframes bg-storm {
+            0% { background-color: #0f172a; }
+            48% { background-color: #0f172a; }
+            50% { background-color: #334155; }
+            52% { background-color: #0f172a; }
+            54% { background-color: #475569; }
+            56% { background-color: #0f172a; }
+            100% { background-color: #0f172a; }
+        }
+        .stormy-bg {
+            animation: bg-storm 10s infinite;
+        }
+
+        .hud-heart svg {
+            width: 32px;
+            height: 32px;
+            fill: #ef4444;
+            filter: drop-shadow(0 0 8px #ef4444);
+        }
+        .hud-heart.lost svg {
+            fill: #475569;
+            filter: none;
+        }
+
+        #flash-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 100;
+            transition: opacity 0.5s ease-out;
+        }
+    </style>
+</head>
+<body class="stormy-bg">
+
+    <!-- Efek Cahaya Skrin -->
+    <div id="flash-overlay"></div>
+
+    <!-- WebCam Feed -->
+    <div id="webcam-container">
+        <video id="webcam" autoplay playsinline></video>
+    </div>
+
+    <!-- Canvas Utama untuk Petir dan Kursor AI -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Layer UI Utama -->
+    <div id="ui-layer">
+        
+        <!-- Screen Utama / Start -->
+        <div id="start-screen" class="flex flex-col items-center justify-center h-full w-full bg-slate-900/90 backdrop-blur-md absolute top-0 left-0 z-20">
+            <h1 class="text-6xl orbitron font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 mb-4 text-center leading-tight drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]">
+                LIGHTNING TEACHER<br><span class="text-4xl text-yellow-300">THUNDER LOCK</span>
+            </h1>
+            <p class="text-xl mb-8 text-cyan-100 font-semibold uppercase tracking-widest text-center">Topik: Tanaman Hidroponik (Asas)</p>
+            
+            <div class="bg-slate-800 p-6 rounded-xl border border-cyan-500/50 max-w-2xl mb-8 text-center shadow-lg">
+                <h3 class="text-2xl orbitron text-cyan-400 mb-4">Cara Bermain:</h3>
+                <ol class="text-left text-slate-300 space-y-3 pl-4">
+                    <li class="flex items-center gap-3"><span class="text-2xl">🖐️</span> <b>Halakan tapak tangan</b> ke kamera untuk menggerakkan kursor (Sasaran).</li>
+                    <li class="flex items-center gap-3"><span class="text-2xl">✊</span> <b>Genggam tangan (Clench Fist)</b> apabila kursor berada di atas jawapan untuk melancarkan petir!</li>
+                    <li class="flex items-center gap-3"><span class="text-2xl">⏱️</span> Anda ada masa <b>15 saat</b> untuk setiap soalan.</li>
+                </ol>
+            </div>
+
+            <button id="start-btn" class="orbitron text-2xl px-10 py-4 bg-gradient-to-r from-cyan-600 to-blue-700 hover:from-cyan-500 hover:to-blue-600 text-white rounded-full font-bold shadow-[0_0_20px_rgba(6,182,212,0.6)] transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+                MEMUATKAN AI...
+            </button>
+            
+            <div class="mt-12 text-2xl md:text-3xl orbitron font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-orange-500 drop-shadow-[0_0_15px_rgba(250,204,21,0.8)] animate-pulse uppercase tracking-widest text-center">
+                DISEDIAKAN OLEH CIKGU AMIRUL
+            </div>
+        </div>
+
+        <!-- In-Game UI -->
+        <div id="game-screen" class="hidden flex-col h-full w-full relative">
+            <!-- HUD -->
+            <div class="flex justify-between items-center p-6">
+                <div class="flex gap-2" id="lives-container">
+                    <div class="hud-heart" id="life-1"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div>
+                    <div class="hud-heart" id="life-2"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div>
+                    <div class="hud-heart" id="life-3"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div>
+                </div>
+                <div class="orbitron text-4xl text-yellow-400 font-bold drop-shadow-[0_0_10px_rgba(250,204,21,0.8)]">
+                    SKOR: <span id="score-display">0</span>
+                </div>
+                <div class="orbitron text-2xl bg-slate-800/80 px-6 py-2 rounded-full border border-cyan-500/50">
+                    Soalan <span id="question-number">1</span>/10
+                </div>
+            </div>
+
+            <!-- Timer Bar -->
+            <div class="w-full h-3 bg-slate-800 mt-2">
+                <div id="timer-bar" class="h-full bg-gradient-to-r from-cyan-400 to-blue-500 w-full transition-all ease-linear" style="transition-duration: 1s;"></div>
+            </div>
+
+            <!-- Question & Answers Area -->
+            <div class="flex-grow flex flex-col items-center justify-center p-8 z-10">
+                <h2 id="question-text" class="text-4xl text-center md:text-5xl font-bold mb-12 text-white drop-shadow-lg max-w-4xl">
+                    Apakah maksud hidroponik?
+                </h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-5xl" id="answers-container">
+                    <!-- Jawapan akan diisi melalui JS -->
+                </div>
+            </div>
+            
+            <!-- Feedback Overlay -->
+            <div id="feedback-message" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-7xl orbitron font-black text-transparent opacity-0 pointer-events-none scale-50 transition-all duration-300 z-30">
+                BAGUS!
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden flex-col items-center justify-center h-full w-full bg-slate-950/95 absolute top-0 left-0 z-40">
+            <h1 id="end-title" class="text-6xl orbitron font-black mb-4 text-center">PERMAINAN TAMAT</h1>
+            <p class="text-2xl mb-2 text-slate-300">Skor Akhir Anda:</p>
+            <div id="final-score" class="text-8xl orbitron text-yellow-400 font-bold mb-8 drop-shadow-[0_0_20px_rgba(250,204,21,1)]">0</div>
+            <p id="end-message" class="text-xl text-cyan-300 mb-10 max-w-2xl text-center">Teruskan belajar tentang hidroponik!</p>
+            
+            <button onclick="resetGame()" class="orbitron text-2xl px-10 py-4 bg-cyan-600 hover:bg-cyan-500 text-white rounded-full font-bold shadow-[0_0_20px_rgba(6,182,212,0.6)] transition-all hover:scale-105">
+                MAIN SEMULA
+            </button>
+
+            <div class="mt-12 text-2xl orbitron font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-orange-500 drop-shadow-[0_0_15px_rgba(250,204,21,0.8)] uppercase tracking-widest text-center">
+                DISEDIAKAN OLEH CIKGU AMIRUL
+            </div>
+        </div>
+    </div>
+
+    <!-- Logik Javascript Utama -->
+    <script>
+        const questionsData = [
+            { q: "Apakah maksud hidroponik?", a: ["Menanam tanpa tanah", "Menanam dalam pasir", "Menanam atas pokok"], correct: 0 },
+            { q: "Medium tanaman manakah yang sering digunakan dalam hidroponik?", a: ["Span dan Sabut", "Tanah liat merah", "Batu bata"], correct: 0 },
+            { q: "Apakah fungsi utama larutan nutrien?", a: ["Membekalkan makanan pada pokok", "Membunuh serangga perosak", "Mencantikkan daun sayur"], correct: 0 },
+            { q: "Mengapakah air dalam takungan perlu sentiasa dipantau?", a: ["Elak nyamuk aedes membiak", "Supaya ikan boleh hidup", "Menyejukkan batang pokok"], correct: 0 },
+            { q: "Sayuran manakah paling sesuai ditanam secara hidroponik?", a: ["Sawi dan Salad", "Durian dan Rambutan", "Kelapa Sawit"], correct: 0 },
+            { q: "Apakah alat yang digunakan untuk mengukur kepekatan baja hidroponik?", a: ["EC Meter (Electrical Conductivity)", "Pembaris meter", "Jangka suhu udara"], correct: 0 },
+            { q: "Kenapakah akar pokok perlu sentiasa terkena air baja?", a: ["Untuk menyerap nutrien berterusan", "Untuk mencuci akar supaya bersih", "Sebagai pemberat pokok"], correct: 0 },
+            { q: "Berapakah purata nilai pH air yang sesuai untuk tanaman hidroponik?", a: ["pH 5.5 hingga 6.5", "pH 1.0 hingga 2.0", "pH 10.0 hingga 14.0"], correct: 0 },
+            { q: "Apakah jenis sistem hidroponik yang paling mudah untuk pemula?", a: ["Sistem Takung (Static)", "Sistem Aeroponik", "Sistem Pengairan Titis"], correct: 0 },
+            { q: "Kenapakah bekas takungan hidroponik digalakkan berwarna gelap/hitam?", a: ["Untuk menghalang pertumbuhan lumut", "Supaya nampak lebih kemas", "Untuk menyerap haba matahari"], correct: 0 }
+        ];
+
+        let currentQuestions = [];
+        let qIndex = 0;
+        let score = 0;
+        let lives = 3;
+        let timeRemaining = 15;
+        let timerInterval;
+        let gameActive = false;
+        let isInputLocked = false;
+        
+        let cursorPos = { x: 0, y: 0, active: false };
+        let isFistDetected = false;
+        let lastGestureState = false; // false = open, true = fist
+        
+        // Setup Canvas
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        function resizeCanvas() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Audio Context (Synthesizer)
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            if (type === 'thunder') {
+                // White noise burst untuk petir
+                const bufferSize = audioCtx.sampleRate * 1.5; // 1.5 saat
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                
+                const noise = audioCtx.createBufferSource();
+                noise.buffer = buffer;
+                
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(600, audioCtx.currentTime);
+                filter.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 1.5);
+
+                gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+                
+                noise.connect(filter);
+                filter.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                noise.start();
+                return;
+            } else if (type === 'correct') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+                osc.frequency.exponentialRampToValueAtTime(1046.50, audioCtx.currentTime + 0.1); // C6
+                gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.6);
+            } else if (type === 'wrong') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.4);
+                gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.4);
+            }
+            
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+        }
+
+        let lightnings = [];
+        let particles = [];
+
+        function createLightning(x1, y1, x2, y2, color) {
+            lightnings.push({
+                x1, y1, x2, y2, color,
+                life: 1.0,
+                segments: generateSegments(x1, y1, x2, y2)
+            });
+            playSound('thunder');
+            
+            // Screen flash
+            const flash = document.getElementById('flash-overlay');
+            flash.style.opacity = '1';
+            setTimeout(() => { flash.style.opacity = '0'; }, 50);
+
+            // Particles at target
+            for(let i=0; i<15; i++) {
+                particles.push({
+                    x: x2, y: y2,
+                    vx: (Math.random() - 0.5) * 15,
+                    vy: (Math.random() - 0.5) * 15,
+                    life: 1.0,
+                    color: color
+                });
+            }
+        }
+
+        function generateSegments(x1, y1, x2, y2) {
+            let segments = [];
+            let steps = 12;
+            let currX = x1, currY = y1;
+            let dx = (x2 - x1) / steps;
+            let dy = (y2 - y1) / steps;
+            
+            for(let i=0; i<steps; i++) {
+                let nextX = x1 + dx * (i+1) + (Math.random() - 0.5) * (100 * (1 - i/steps));
+                let nextY = y1 + dy * (i+1) + (Math.random() - 0.5) * (100 * (1 - i/steps));
+                if(i === steps - 1) { nextX = x2; nextY = y2; }
+                segments.push({x1: currX, y1: currY, x2: nextX, y2: nextY});
+                currX = nextX; currY = nextY;
+            }
+            return segments;
+        }
+
+        function drawEffects() {
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw Kursor Tangan (Ai Reticle)
+            if (cursorPos.active && gameActive) {
+                ctx.beginPath();
+                ctx.arc(cursorPos.x, cursorPos.y, 25, 0, Math.PI * 2);
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = isFistDetected ? '#ef4444' : '#06b6d4';
+                ctx.setLineDash([10, 5]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // Titik tengah
+                ctx.beginPath();
+                ctx.arc(cursorPos.x, cursorPos.y, 5, 0, Math.PI * 2);
+                ctx.fillStyle = isFistDetected ? '#ef4444' : '#06b6d4';
+                ctx.fill();
+            }
+
+            // Draw Lightnings
+            for (let i = lightnings.length - 1; i >= 0; i--) {
+                let l = lightnings[i];
+                ctx.beginPath();
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = l.color;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 4 * l.life;
+                
+                l.segments.forEach(seg => {
+                    ctx.moveTo(seg.x1, seg.y1);
+                    ctx.lineTo(seg.x2, seg.y2);
+                });
+                
+                ctx.stroke();
+                ctx.shadowBlur = 0; // Reset
+                
+                // Draw glow layer
+                ctx.beginPath();
+                ctx.strokeStyle = l.color;
+                ctx.lineWidth = 12 * l.life;
+                ctx.globalAlpha = 0.5;
+                l.segments.forEach(seg => {
+                    ctx.moveTo(seg.x1, seg.y1);
+                    ctx.lineTo(seg.x2, seg.y2);
+                });
+                ctx.stroke();
+                ctx.globalAlpha = 1.0;
+
+                l.life -= 0.05;
+                if (l.life <= 0) lightnings.splice(i, 1);
+            }
+
+            // Draw Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 4 * p.life, 0, Math.PI*2);
+                ctx.fillStyle = p.color;
+                ctx.fill();
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.03;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            requestAnimationFrame(drawEffects);
+        }
+        drawEffects(); // Mula loop visual
+
+        function shuffle(array) {
+            let currentIndex = array.length, randomIndex;
+            while (currentIndex !== 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
+
+        function startGame() {
+            initAudio();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+            document.getElementById('game-screen').classList.add('flex');
+            
+            currentQuestions = shuffle([...questionsData]);
+            qIndex = 0;
+            score = 0;
+            lives = 3;
+            updateHUD();
+            gameActive = true;
+            loadQuestion();
+        }
+
+        function resetGame() {
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('flex');
+            startGame();
+        }
+
+        function loadQuestion() {
+            if (qIndex >= 10 || lives <= 0) {
+                endGame();
+                return;
+            }
+            isInputLocked = false;
+            timeRemaining = 15;
+            document.getElementById('question-number').innerText = qIndex + 1;
+            
+            const q = currentQuestions[qIndex];
+            document.getElementById('question-text').innerText = q.q;
+            
+            const answersContainer = document.getElementById('answers-container');
+            answersContainer.innerHTML = '';
+            
+            // Generate jawapan dengan susunan rawak
+            let options = q.a.map((text, idx) => ({ text, isCorrect: idx === q.correct }));
+            options = shuffle(options);
+
+            options.forEach(opt => {
+                const btn = document.createElement('div');
+                btn.className = 'answer-btn bg-slate-800 border-2 border-slate-600 rounded-2xl p-6 text-xl md:text-2xl font-semibold text-center cursor-pointer min-h-[120px] flex items-center justify-center break-words';
+                btn.innerText = opt.text;
+                btn.dataset.correct = opt.isCorrect;
+                // Add bounding box info later in update loop for collision
+                btn.id = 'ans-' + Math.random().toString(36).substr(2, 9);
+                answersContainer.appendChild(btn);
+            });
+
+            startTimer();
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            const bar = document.getElementById('timer-bar');
+            bar.style.width = '100%';
+            
+            timerInterval = setInterval(() => {
+                if(isInputLocked) return; // Pause timer masa animasi
+
+                timeRemaining--;
+                bar.style.width = (timeRemaining / 15 * 100) + '%';
+                
+                if (timeRemaining <= 3) {
+                    bar.classList.replace('from-cyan-400', 'from-red-500');
+                    bar.classList.replace('to-blue-500', 'to-orange-500');
+                } else {
+                    bar.classList.replace('from-red-500', 'from-cyan-400');
+                    bar.classList.replace('to-orange-500', 'to-blue-500');
+                }
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    handleAnswer(null); // Timeout
+                }
+            }, 1000);
+        }
+
+        function updateHUD() {
+            document.getElementById('score-display').innerText = score;
+            for(let i=1; i<=3; i++) {
+                const heart = document.getElementById(`life-${i}`);
+                if (i <= lives) heart.classList.remove('lost');
+                else heart.classList.add('lost');
+            }
+        }
+
+        function handleAnswer(selectedBtn, hitX, hitY) {
+            if (isInputLocked) return;
+            isInputLocked = true;
+            clearInterval(timerInterval);
+
+            const isCorrect = selectedBtn ? selectedBtn.dataset.correct === 'true' : false;
+            const feedbackMsg = document.getElementById('feedback-message');
+            
+            if (selectedBtn) {
+                // Tembak petir
+                createLightning(cursorPos.x, cursorPos.y, hitX, hitY, isCorrect ? '#22c55e' : '#ef4444');
+                selectedBtn.classList.remove('hovered');
+            }
+
+            if (isCorrect) {
+                score += 100 + (timeRemaining * 10);
+                playSound('correct');
+                feedbackMsg.innerText = "TEPAT!";
+                feedbackMsg.className = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-7xl orbitron font-black text-green-400 drop-shadow-[0_0_20px_rgba(34,197,94,1)] z-30 transition-all duration-300 scale-100 opacity-100";
+                if(selectedBtn) selectedBtn.style.backgroundColor = 'rgba(34, 197, 94, 0.3)';
+            } else {
+                lives--;
+                playSound('wrong');
+                feedbackMsg.innerText = selectedBtn ? "SALAH!" : "MASA TAMAT!";
+                feedbackMsg.className = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-7xl orbitron font-black text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,1)] z-30 transition-all duration-300 scale-100 opacity-100";
+                if(selectedBtn) selectedBtn.style.backgroundColor = 'rgba(239, 68, 68, 0.3)';
+                
+                // Highlight jawapan betul
+                const btns = document.querySelectorAll('.answer-btn');
+                btns.forEach(b => {
+                    if(b.dataset.correct === 'true') {
+                        b.style.backgroundColor = 'rgba(34, 197, 94, 0.3)';
+                        b.style.borderColor = '#22c55e';
+                    }
+                });
+            }
+
+            updateHUD();
+
+            setTimeout(() => {
+                feedbackMsg.style.opacity = '0';
+                feedbackMsg.style.transform = 'translate(-50%, -50%) scale(0.5)';
+                qIndex++;
+                loadQuestion();
+            }, 2000);
+        }
+
+        function endGame() {
+            gameActive = false;
+            document.getElementById('game-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('flex');
+            
+            const gameOverScreen = document.getElementById('game-over-screen');
+            gameOverScreen.classList.remove('hidden');
+            gameOverScreen.classList.add('flex');
+            
+            document.getElementById('final-score').innerText = score;
+            
+            const title = document.getElementById('end-title');
+            const msg = document.getElementById('end-message');
+            
+            if (lives > 0) {
+                title.innerText = "TAHNIAH, PAKAR HIDROPONIK!";
+                title.className = "text-5xl md:text-6xl orbitron font-black mb-4 text-center text-green-400";
+                msg.innerText = "Anda telah menguasai asas tanaman hidroponik dengan cemerlang.";
+            } else {
+                title.innerText = "MISI GAGAL";
+                title.className = "text-6xl orbitron font-black mb-4 text-center text-red-500";
+                msg.innerText = "Jangan berputus asa. Cuba lagi untuk mendalami ilmu hidroponik!";
+            }
+        }
+
+        const videoElement = document.getElementById('webcam');
+
+        const hands = new Hands({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+
+        // Mula kamera dan sedia butang
+        camera.start().then(() => {
+            const startBtn = document.getElementById('start-btn');
+            startBtn.innerText = "MULA MAIN";
+            startBtn.disabled = false;
+            startBtn.onclick = startGame;
+        });
+
+        function isFist(landmarks) {
+            // Formula mengesan penumbuk: Jarak dari pergelangan tangan (0) ke hujung jari (8, 12, 16, 20) 
+            // berbanding pangkal jari (5, 9, 13, 17)
+            let curled = 0;
+            const tips = [8, 12, 16, 20]; // Index, Middle, Ring, Pinky
+            const bases = [5, 9, 13, 17];
+            
+            for (let i = 0; i < 4; i++) {
+                const distTip = Math.hypot(landmarks[tips[i]].x - landmarks[0].x, landmarks[tips[i]].y - landmarks[0].y);
+                const distBase = Math.hypot(landmarks[bases[i]].x - landmarks[0].x, landmarks[bases[i]].y - landmarks[0].y);
+                if (distTip < distBase) {
+                    curled++;
+                }
+            }
+            // Jika 3 atau lebih jari menggenggam, anggap sebagai penumbuk
+            return curled >= 3;
+        }
+
+        function onResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                
+                // Gunakan hujung jari telunjuk (8) atau pangkal tangan (9) sebagai kursor
+                const indexTip = landmarks[8];
+                
+                // Map ke skrin (X diterbalikkan kerana mirror effect webcam)
+                cursorPos.x = (1 - indexTip.x) * width;
+                cursorPos.y = indexTip.y * height;
+                cursorPos.active = true;
+
+                isFistDetected = isFist(landmarks);
+
+                if (gameActive && !isInputLocked) {
+                    checkCollisions();
+                }
+
+                // Logik menembak (Transisi dari Tangan Buka -> Penumbuk)
+                if (isFistDetected && !lastGestureState && gameActive && !isInputLocked) {
+                    // Cari jika ada kotak jawapan yg sedang dihover
+                    let targetBtn = null;
+                    const btns = document.querySelectorAll('.answer-btn');
+                    btns.forEach(btn => {
+                        if (btn.classList.contains('hovered')) {
+                            targetBtn = btn;
+                        }
+                    });
+
+                    if (targetBtn) {
+                        const rect = targetBtn.getBoundingClientRect();
+                        const hitX = rect.left + rect.width / 2;
+                        const hitY = rect.top + rect.height / 2;
+                        handleAnswer(targetBtn, hitX, hitY);
+                    }
+                }
+
+                lastGestureState = isFistDetected;
+
+            } else {
+                cursorPos.active = false;
+            }
+        }
+
+        function checkCollisions() {
+            const btns = document.querySelectorAll('.answer-btn');
+            btns.forEach(btn => {
+                const rect = btn.getBoundingClientRect();
+                // Semak samada kursor berada di dalam bounding box jawapan
+                if (cursorPos.x >= rect.left && cursorPos.x <= rect.right &&
+                    cursorPos.y >= rect.top && cursorPos.y <= rect.bottom) {
+                    btn.classList.add('hovered');
+                } else {
+                    btn.classList.remove('hovered');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
